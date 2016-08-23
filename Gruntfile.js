@@ -1,40 +1,73 @@
-var module = module;
-//this keeps the module file from doing anything inside the jasmine tests.
-//We could avoid this by making all the source be in a specific directory, but that would break backwards compatibility.
-if (module) {
-    module.exports = function (grunt) {
-        'use strict';
+ (function() {
+    var Ext = window.Ext4 || window.Ext;
 
-        var config, debug, environment, spec;
-        grunt.loadNpmTasks('grunt-contrib-jasmine');
-        grunt.loadNpmTasks('grunt-contrib-jshint');
+    Ext.define('Rally.apps.printcards.printstorycards.PrintStoryCardsApp', {
+        extend: 'Rally.app.TimeboxScopedApp',
+        alias: 'widget.printstorycards',
+        requires: [
+            'Rally.data.wsapi.Store',
+            'Rally.apps.printcards.PrintCard',
+            'Rally.app.plugin.Print'
+        ],
+        plugins: [{
+            ptype: 'rallyappprinting'
+        }],
+        helpId: 241,
+        componentCls: 'printcards',
+        scopeType: 'iteration',
+        autoScroll: false,
 
-        grunt.registerTask('test', ['jshint','jasmine']);
-        grunt.registerTask('default', ['test']);
+        launch: function() {
+            this.add({
+                xtype: 'container',
+                itemId: 'cards'
+            });
+            this.callParent(arguments);
+        },
 
-        spec = grunt.option('spec') || '*';
-        config = grunt.file.readJSON('config.json');
-        return grunt.initConfig({
+        onScopeChange: function(scope) {
+            this.down('#cards').getEl().setHTML('');
+            this._loadStories(scope);
+        },
 
-            pkg: grunt.file.readJSON('package.json'),
+        _loadStories: function(scope) {
+            Ext.create('Rally.data.wsapi.Store', {
+                context: this.getContext().getDataContext(),
+                autoLoad: true,
+                model: Ext.identityFn('UserStory'),
+                fetch: ['FormattedID', 'Name', 'Owner', 'Description', 'PlanEstimate'],
+                limit: (scope.getRecord()) ? 200 : 50,
+                listeners: {
+                    load: this._onStoriesLoaded,
+                    scope: this
+                },
+                filters: [
+                    scope.getQueryFilter()
+                ]
+            });
+        },
 
-            jasmine: {
-                dev: {
-                    src: "./*.js",
-                    options: {
-                        vendor:["https://rally1.rallydev.com/apps/"+config.sdk+"/sdk-debug.js"],
-                        template: 'test/specs.tmpl',
-                        specs: "test/**/" + spec + "Spec.js",
-                        helpers: []
-                    }
+        _onStoriesLoaded: function(store, records) {
+            var printCardHtml = '';
+            _.each(records, function(record, idx) {
+                printCardHtml += Ext.create('Rally.apps.printcards.PrintCard').tpl.apply(record.data);
+                if (idx%4 === 3) {
+                    printCardHtml += '<div class="pb"></div>';
                 }
-            },
-            jshint:{
-              all: ['test/**/*.js']
+            }, this);
+            Ext.DomHelper.insertHtml('beforeEnd', this.down('#cards').getEl().dom, printCardHtml);
+
+            if(Rally.BrowserTest) {
+                Rally.BrowserTest.publishComponentReady(this);
             }
-        });
-  }
+        },
 
-
-}
-
+        getOptions: function() {
+            return [
+                this.getPrintMenuOption({title: 'Print Story Cards App'}) //from printable mixin
+            ];
+        }
+    });
+})();
+Contact GitHub API Training Shop Blog About
+© 2016 GitHub, Inc. Terms Privacy Security Status Help
